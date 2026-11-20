@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#111827">
+<title>私人音视频播放器</title>
+<style>
+:root{color-scheme:dark;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+*{box-sizing:border-box}
+body{margin:0;background:#111827;color:#f9fafb;padding:22px 16px 40px}
+main{max-width:720px;margin:auto}
+h1{font-size:24px;margin:4px 0 6px}
+.sub{color:#9ca3af;font-size:14px;margin:0 0 22px}
+.panel{background:#1f2937;border:1px solid #374151;border-radius:18px;padding:16px;margin:14px 0}
+label{display:block;font-size:14px;color:#d1d5db;margin:12px 0 7px}
+input,select,button{font:inherit}
+input[type=url],select{width:100%;padding:13px;border-radius:11px;border:1px solid #4b5563;background:#111827;color:#fff}
+input[type=file]{width:100%;margin:8px 0;color:#d1d5db}
+.actions{display:flex;gap:10px;margin-top:14px;flex-wrap:wrap}
+button{border:0;border-radius:12px;padding:12px 16px;background:#2563eb;color:white;font-weight:600}
+button.secondary{background:#374151}
+.media{width:100%;margin-top:14px;border-radius:12px;background:#000;max-height:55vh}
+audio{width:100%;margin-top:18px}
+.note{font-size:12px;line-height:1.55;color:#9ca3af}
+.status{font-size:13px;color:#a7f3d0;min-height:20px;margin-top:10px;overflow-wrap:anywhere}
+.hidden{display:none}
+</style>
+</head>
+<body>
+<main>
+  <h1>私人音视频播放器</h1>
+  <p class="sub">第一版 · 无账号、无后台、无需付费服务器</p>
+  <section class="panel">
+    <label for="kind">媒体类型</label>
+    <select id="kind">
+      <option value="audio">音频</option>
+      <option value="video">视频</option>
+    </select>
+    <label for="url">媒体直链（HTTPS）</label>
+    <input id="url" type="url" placeholder="粘贴 .mp3、.ogg、.mp4、.webm 等媒体直链">
+    <div class="actions">
+      <button id="load">加载并播放</button>
+      <button id="clear" class="secondary">清空</button>
+    </div>
+    <label for="file">或选择 iPhone 中的本地文件</label>
+    <input id="file" type="file" accept="audio/*,video/*">
+    <div id="status" class="status" aria-live="polite"></div>
+    <audio id="audio" class="hidden" controls preload="metadata"></audio>
+    <video id="video" class="hidden" controls playsinline webkit-playsinline preload="metadata"></video>
+  </section>
+  <section class="panel">
+    <strong>使用提示</strong>
+    <p class="note">请使用你有权播放的媒体。网页只负责播放，不会上传或保存你选择的本地文件。部分网站会阻止外部网页直接播放；遇到这种情况，请寻找可合法使用的 MP3、OGG、MP4 或 WebM 直链。iPhone 可能要求你点击播放按钮后才开始播放。</p>
+    <p class="note">本版本是网页播放器，可在 ChatGPT 的内置浏览器或 Safari 中打开；它不是嵌入聊天消息气泡中的原生播放器。</p>
+  </section>
+</main>
+<script>
+const kind=document.getElementById('kind');
+const url=document.getElementById('url');
+const file=document.getElementById('file');
+const audio=document.getElementById('audio');
+const video=document.getElementById('video');
+const status=document.getElementById('status');
+let localObjectUrl=null;
+function stopAndReset(el){el.pause();el.removeAttribute('src');el.load();el.classList.add('hidden')}
+function loadMedia(src,type,auto=true){
+  stopAndReset(audio); stopAndReset(video);
+  const el=type==='video'?video:audio;
+  el.src=src; el.classList.remove('hidden'); el.load();
+  status.textContent='媒体已加载。若未自动开始，请点击播放器的播放按钮。';
+  if(auto){const p=el.play(); if(p&&p.catch)p.catch(()=>{status.textContent='已加载。iPhone 可能要求手动点击播放。';});}
+}
+document.getElementById('load').addEventListener('click',()=>{
+  const src=url.value.trim();
+  if(!src){status.textContent='请先粘贴媒体直链。';return;}
+  try{const u=new URL(src);if(u.protocol!=='https:'&&u.protocol!=='http:'){throw new Error();}}
+  catch(e){status.textContent='链接格式不正确，请使用 http 或 https 地址。';return;}
+  loadMedia(src,kind.value);
+});
+document.getElementById('clear').addEventListener('click',()=>{
+  stopAndReset(audio);stopAndReset(video);url.value='';file.value='';status.textContent='已清空。';
+  if(localObjectUrl){URL.revokeObjectURL(localObjectUrl);localObjectUrl=null;}
+});
+file.addEventListener('change',()=>{
+  const f=file.files&&file.files[0];if(!f)return;
+  if(localObjectUrl)URL.revokeObjectURL(localObjectUrl);
+  localObjectUrl=URL.createObjectURL(f);
+  const type=f.type.startsWith('video/')?'video':'audio';
+  kind.value=type;loadMedia(localObjectUrl,type,false);
+  status.textContent='本地文件已载入。文件仅在当前页面播放，不会上传。';
+});
+</script>
+</body>
+</html>
