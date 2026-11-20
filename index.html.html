@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#111827">
+<title>私人音视频播放器 V1.1</title>
+<style>
+:root{color-scheme:dark;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+*{box-sizing:border-box}
+body{margin:0;background:#111827;color:#f9fafb;padding:22px 16px 40px}
+main{max-width:720px;margin:auto}
+h1{font-size:24px;margin:4px 0 6px}
+.sub{color:#9ca3af;font-size:14px;margin:0 0 22px}
+.panel{background:#1f2937;border:1px solid #374151;border-radius:18px;padding:16px;margin:14px 0}
+label{display:block;font-size:14px;color:#d1d5db;margin:12px 0 7px}
+input,select,button{font:inherit}
+input[type=url],select{width:100%;padding:13px;border-radius:11px;border:1px solid #4b5563;background:#111827;color:#fff}
+input[type=file]{width:100%;margin:8px 0;color:#d1d5db}
+.actions{display:flex;gap:10px;margin-top:14px;flex-wrap:wrap}
+button{border:0;border-radius:12px;padding:12px 16px;background:#2563eb;color:white;font-weight:600}
+button.secondary{background:#374151}
+button:disabled{opacity:.55}
+.media{width:100%;margin-top:14px;border-radius:12px;background:#000;max-height:55vh}
+audio{width:100%;margin-top:18px}
+.note{font-size:12px;line-height:1.6;color:#9ca3af}
+.status{font-size:13px;line-height:1.55;color:#a7f3d0;min-height:20px;margin-top:10px;overflow-wrap:anywhere}
+.status.error{color:#fca5a5}
+.status.warn{color:#fcd34d}
+.hidden{display:none}
+small{color:#9ca3af}
+</style>
+</head>
+<body>
+<main>
+  <h1>私人音视频播放器</h1>
+  <p class="sub">V1.1 · 播放诊断 · 常用测试资源 · 本地文件</p>
+  <section class="panel">
+    <label for="kind">媒体类型</label>
+    <select id="kind">
+      <option value="audio">音频</option>
+      <option value="video">视频</option>
+    </select>
+    <label for="url">媒体直链（HTTPS）</label>
+    <input id="url" type="url" placeholder="粘贴 .mp3、.ogg、.mp4、.webm 等媒体直链" autocomplete="url">
+    <div class="actions">
+      <button id="load">加载并播放</button>
+      <button id="clear" class="secondary">清空</button>
+    </div>
+    <label for="preset">快速测试资源</label>
+    <select id="preset">
+      <option value="">选择一个测试资源（可选）</option>
+      <option value="audio|https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3">MP3 音频测试</option>
+      <option value="video|https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4">MP4 画面测试（无声样本）</option>
+      <option value="video|https://media.w3.org/2010/05/sintel/trailer.mp4">MP4 视频及音轨测试</option>
+    </select>
+    <label for="file">或选择 iPhone 中的本地文件</label>
+    <input id="file" type="file" accept="audio/*,video/*">
+    <div id="status" class="status" aria-live="polite">等待加载媒体。</div>
+    <audio id="audio" class="hidden" controls preload="metadata"></audio>
+    <video id="video" class="hidden" controls playsinline webkit-playsinline preload="metadata"></video>
+  </section>
+  <section class="panel">
+    <strong>故障诊断说明</strong>
+    <p class="note">如果播放失败，页面会显示浏览器能检测到的错误类型。常见原因包括：链接不是媒体直链、服务器拒绝跨站访问、文件格式或编码不受设备支持、网络中断。网页无法绕过来源网站的访问限制。</p>
+    <p class="note">如果显示“等待手动播放”，请直接点击下方音频/视频控件中的播放键。iPhone 可能阻止网页自动播放。</p>
+    <p class="note">本地文件只在当前页面临时播放，不会上传。刷新或关闭页面后，本地文件需要重新选择。</p>
+    <p class="note">本版本是网页播放器，可在 ChatGPT 内置浏览器或 Safari 中打开；它不是嵌入聊天消息气泡中的原生播放器。</p>
+  </section>
+</main>
+<script>
+const kind=document.getElementById('kind');
+const url=document.getElementById('url');
+const file=document.getElementById('file');
+const audio=document.getElementById('audio');
+const video=document.getElementById('video');
+const status=document.getElementById('status');
+const preset=document.getElementById('preset');
+let localObjectUrl=null;
+let active=null;
+function report(message,level='ok'){
+  status.textContent=message;
+  status.className='status'+(level==='error'?' error':level==='warn'?' warn':'');
+}
+function stopAndReset(el){
+  el.pause();el.removeAttribute('src');el.load();el.classList.add('hidden');
+}
+function mediaError(el){
+  if(!el.error){report('播放失败，但浏览器没有提供详细错误。请检查链接和网络。','error');return;}
+  const e=el.error;
+  const messages={
+    1:'媒体加载被中止（MEDIA_ERR_ABORTED）。可能是用户停止了加载或页面切换。',
+    2:'网络错误（MEDIA_ERR_NETWORK）。服务器连接中断、拒绝访问或网络不可达。',
+    3:'解码失败（MEDIA_ERR_DECODE）。文件可能损坏，或视频/音频编码不兼容。',
+    4:'媒体格式或来源不受支持（MEDIA_ERR_SRC_NOT_SUPPORTED）。请确认这是可直接访问的媒体文件链接。'
+  };
+  report(messages[e.code]||('媒体播放错误，错误代码：'+e.code),'error');
+}
+function attachDiagnostics(el){
+  el.addEventListener('loadstart',()=>report('正在连接媒体来源…','warn'));
+  el.addEventListener('loadedmetadata',()=>report('媒体信息已读取。可以点击播放。'));
+  el.addEventListener('canplay',()=>report('媒体已准备好，可以播放。'));
+  el.addEventListener('playing',()=>report('正在播放。'));
+  el.addEventListener('waiting',()=>report('正在缓冲，请稍候…','warn'));
+  el.addEventListener('stalled',()=>report('媒体数据暂时未能继续传输。可能是网络或服务器响应问题。','warn'));
+  el.addEventListener('error',()=>mediaError(el));
+  el.addEventListener('ended',()=>report('播放结束。'));
+}
+attachDiagnostics(audio);attachDiagnostics(video);
+function loadMedia(src,type,auto=true){
+  stopAndReset(audio);stopAndReset(video);
+  active=type==='video'?video:audio;
+  active.src=src;active.classList.remove('hidden');active.load();
+  report('正在加载媒体…','warn');
+  if(auto){
+    const p=active.play();
+    if(p&&p.catch)p.catch(err=>{
+      if(err&&err.name==='NotAllowedError')report('媒体已加载，但 iPhone 阻止自动播放。请点击播放器自己的播放键。','warn');
+      else if(err&&err.name==='NotSupportedError')report('浏览器不支持该媒体格式或编码。','error');
+      else report('自动播放未启动：'+(err&&err.message?err.message:'未知原因')+'。请尝试手动点击播放。','warn');
+    });
+  }
+}
+document.getElementById('load').addEventListener('click',()=>{
+  const src=url.value.trim();
+  if(!src){report('请先粘贴媒体直链。','error');return;}
+  try{
+    const u=new URL(src);
+    if(u.protocol!=='https:'&&u.protocol!=='http:')throw new Error();
+  }catch(e){report('链接格式不正确，请使用 http 或 https 地址。','error');return;}
+  if(localObjectUrl){URL.revokeObjectURL(localObjectUrl);localObjectUrl=null;}
+  loadMedia(src,kind.value);
+});
+preset.addEventListener('change',()=>{
+  if(!preset.value)return;
+  const parts=preset.value.split('|');
+  kind.value=parts[0];url.value=parts.slice(1).join('|');
+  report('测试地址已填入。点击“加载并播放”开始测试。');
+});
+document.getElementById('clear').addEventListener('click',()=>{
+  stopAndReset(audio);stopAndReset(video);active=null;url.value='';file.value='';preset.value='';
+  if(localObjectUrl){URL.revokeObjectURL(localObjectUrl);localObjectUrl=null;}
+  report('已清空。');
+});
+file.addEventListener('change',()=>{
+  const f=file.files&&file.files[0];if(!f)return;
+  if(localObjectUrl)URL.revokeObjectURL(localObjectUrl);
+  localObjectUrl=URL.createObjectURL(f);
+  const type=f.type.startsWith('video/')?'video':'audio';
+  kind.value=type;url.value='';
+  loadMedia(localObjectUrl,type,false);
+  report('本地文件已载入。请点击播放器控件中的播放键。');
+});
+</script>
+</body>
+</html>
